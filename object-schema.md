@@ -13,9 +13,5 @@
 # Decision Process
 ```mermaid
   graph TD;
-      A[Generate Base Objects: Authors, Topics] --> B[Generate Events];
-      B --> C[Generate Articles];
-      C --> F[Generate Page Views];
-      D[Generate Users] --> E[Assign Users to Segments];
-      D -- Preferences, Access --> F;
 ```
+
