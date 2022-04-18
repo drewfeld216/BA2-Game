@@ -1,5 +1,5 @@
 ```mermaid
-  graph Objects;
+  graph TD;
       Authors --> Articles;
       Events -- Probabilities --> Topics;
       Topics -- Probabilities --> Articles;
@@ -10,7 +10,7 @@
 ```
 
 ```mermaid
-  graph Generation;
+  graph TD;
       Authors --> Articles;
       Events -- Probabilities --> Topics;
       Topics -- Probabilities --> Articles;
