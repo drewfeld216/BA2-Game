@@ -15,6 +15,7 @@
   graph TD;
       A[Generate Base Objects: Authors, Topics] --> B[Generate Events];
       B --> C[Generate Articles];
-      C --> E[Generate Page Views];
-      D[Generate Users] --> E;
+      C --> F[Generate Page Views];
+      D[Generate Users] --> E[Assign Users to Segments];
+      D -- Preferences, Access --> F;
 ```
