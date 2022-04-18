@@ -4,7 +4,7 @@
       Events -- Probabilities --> Topics;
       Topics -- Probabilities --> Articles;
       Users -- Membership --> Segments;
-      Users --> Page Views;
-      Segments --> Page Views;
-      Articles --> Page Views;
+      Users --> A[Page Views];
+      Segments --> A[Page Views];
+      Articles --> A[Page Views];
 ```
