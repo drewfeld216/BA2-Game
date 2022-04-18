@@ -1,7 +1,6 @@
 ```mermaid
   graph TD;
-      A-->B;
-      A-->C;
-      B-->D;
-      C-->D;
+      Authors --> Articles;
+      Events -- Probabilities --> Topics;
+      Topics -- Probabilities --> Articles;
 ```
