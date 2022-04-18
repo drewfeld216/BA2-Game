@@ -13,7 +13,7 @@
 # Decision Process
 ```mermaid
   graph TD;
-      A[Generate Base Objects (Authors, Topics)] --> B[Generate Events];
+      A[Generate Base Objects: Authors, Topics] --> B[Generate Events];
       B --> C[Generate Articles];
       C --> E[Generate Page Views];
       D[Generate Users] --> E;
