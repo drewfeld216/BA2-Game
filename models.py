@@ -1,8 +1,11 @@
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Float, Boolean
+import itertools
+import random
 
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Float, Boolean, func, select
 from sqlalchemy.orm import registry, relationship, sessionmaker
 
-# a sessionmaker(), also in the same scope as the engine
+from metrics import log_metric
+
 engine = create_engine('sqlite:///game.db')
 Session = sessionmaker(engine)
 
@@ -47,6 +50,8 @@ class Topic(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String(50))
     prob = Column(Float)
+    game_id = Column(ForeignKey('game.id'))
+    game = relationship('Game')
     authors = relationship('AuthorTopic', back_populates='topic')
     events = relationship('EventTopic', back_populates='topic')
     users = relationship('UserTopic', back_populates='topic')
@@ -57,6 +62,8 @@ class Event(Base):
     start = Column(Integer)
     end = Column(Integer)
     intensity = Column(Integer)
+    game_id = Column(ForeignKey('game.id'))
+    game = relationship('Game')
     topics = relationship('EventTopic', back_populates='event')
 
 class Author(Base):
@@ -65,6 +72,8 @@ class Author(Base):
     name = Column(String(50))
     quality = Column(Integer)
     popularity = Column(Integer)
+    game_id = Column(ForeignKey('game.id'))
+    game = relationship('Game')
     topics = relationship('AuthorTopic', back_populates='author')
     users = relationship('UserAuthor', back_populates='author')
 
@@ -80,8 +89,28 @@ class Article(Base):
     author_id = Column(Integer, ForeignKey('author.id'))
     day = Column(Integer)
     wordcount = Column(Integer)
+    game_id = Column(ForeignKey('game.id'))
+    game = relationship('Game')
     topic = relationship('Topic')
     author = relationship('Author')
+
+class PVCache:
+    teams = {}
+    
+    def get(self, team, user, trailing_days):
+        try:
+            return list(itertools.chain(*self.teams[team.id][user.id][-trailing_days:]))
+        except:
+            return []
+
+    def append(self, team, user, articles):
+        if team.id not in self.teams.keys():
+            self.teams[team.id] = {}
+        if user.id not in self.teams[team.id].keys():
+            self.teams[team.id][user.id] = []
+        self.teams[team.id][user.id].append(articles)
+
+pv_cache = PVCache()
 
 class User(Base):
     __tablename__ = 'user'
@@ -92,30 +121,108 @@ class User(Base):
     first_day = Column(Integer)
     lifetime = Column(Integer)
     ad_sensitivity = Column(Float)
+    game_id = Column(ForeignKey('game.id'))
+    game = relationship('Game')
     topics = relationship('UserTopic', back_populates='user')
     authors = relationship('UserAuthor', back_populates='user')
+    pageviews = relationship('Pageview', back_populates='user', lazy='dynamic')
+
+    def topics_dict(self):
+        td = {}
+        for user_topic in self.topics:
+            td[user_topic.topic.name] = user_topic.prob
+        return td
+
+    def pageview(self, db, day, article, duration, team):
+        db.add(
+            Pageview(
+                team=team,
+                article=article,
+                day=day,
+                duration=duration,
+                user=self,
+            )
+        )
+
+    def simulate_session(self, db, day, articles, cache_pvs = False):
+        # sort articles by how much the user is likely to want to read
+        user_topics = self.topics_dict()
+        random.shuffle(articles)
+        for team in self.game.teams:
+            # For the first year simulation, we use a simple in-memory cache for pageviews
+            # so it doesn't take an actual year to run the sim
+            if (cache_pvs):
+                articles_seen = pv_cache.get(team, self, 30)
+            else:
+                prior_pvs = self.pageviews \
+                    .filter(Pageview.team_id == team.id) \
+                    .filter(Pageview.day <= day) \
+                    .filter(Pageview.day <= 30) \
+                    .all()
+                articles_seen = [pv.article.id for pv in prior_pvs]
+            score_average = 0.25651818456545666
+            score_stddev = 0.14619941832318883
+            score_cutoff = score_average + score_stddev
+            articles_clicked = []
+            for article in articles:
+                # don't click the same headline twice
+                if article.id in articles_seen:
+                    continue
+                score = sum((
+                    user_topics[article.topic.name] * 2,
+                    article.author.popularity * 0.5,
+                    article.author.quality * 0.02,
+                ))
+                log_metric('pv_score', score)
+                if (score > score_cutoff):
+                    duration = article.wordcount / 230 * 2 * score # 230 wpm of reading
+                    log_metric('pv_intent')
+                    articles_clicked.append(article.id)
+                    self.pageview(db, day, article, duration, team)
+                    # each subsequent article is harder to click
+                    score_cutoff += score_stddev * 0.5
+            pv_cache.append(team, self, articles_clicked)
 
 class Pageview(Base):
     __tablename__ = 'pageview'
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('user.id'))
     article_id = Column(Integer, ForeignKey('article.id'))
+    team_id = Column(Integer, ForeignKey('team.id'))
     day = Column(Integer)
     duration = Column(Integer)
     saw_paywall = Column(Boolean)
     user = relationship('User')
     article = relationship('Article')
+    team = relationship('Team')
 
 class Game(Base):
     __tablename__ = 'game'
     id = Column(Integer, primary_key=True)
+    seed = Column(Integer)
+    name = Column(String(50))
+    teams = relationship('Team', back_populates='game')
 
 class Team(Base):
     __tablename__ = 'team'
     id = Column(Integer, primary_key=True)
+    name = Column(String(50))
+    game_id = Column(Integer, ForeignKey('game.id'))
+    game = relationship('Game')
+    strategies = relationship('Strategy', back_populates='team')
+
+class Strategy(Base):
+    __tablename__ = 'strategy'
+    id = Column(Integer, primary_key=True)
+    team_id = Column(Integer, ForeignKey('team.id'))
+    cost = Column(Float)
+    ads = Column(Integer)
+    free_pvs = Column(Integer)
+    team = relationship('Team')
 
 class Player(Base):
     __tablename__ = 'player'
+    email = Column(String(50))
     id = Column(Integer, primary_key=True)
 
 def create_db():
