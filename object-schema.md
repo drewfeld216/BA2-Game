@@ -6,9 +6,10 @@
       Users -- "Preferences (UserTopic)" --> Topics;
       Users -- "Favorites (UserAuthor)" --> Authors;
       Authors & Topics --> Articles;
-      Sessions --> Users;
       Segments -- Rights --> Users;
-      Sessions & Articles & Users --> PV(Page Views);
+      Sessions --> Users;
+      Sessions & Articles --> PV(Page Views);
+      Users -- Access --> PV;
 ```
 
 # Decision Process
