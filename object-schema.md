@@ -7,7 +7,8 @@
       Users -- "Favorites (UserAuthor)" --> Authors;
       Authors & Topics --> Articles;
       Sessions --> Users;
-      Sessions & Articles --> PV(Page Views);
+      Segments -- Rights --> Users;
+      Sessions & Articles & Users --> PV(Page Views);
 ```
 
 # Decision Process
