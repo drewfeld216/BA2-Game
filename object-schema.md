@@ -1,6 +1,7 @@
 # Object Relationship Map
 ```mermaid
-  graph TD;        
+  graph TD;
+      subgraph Game;
       Events -- "Influence (EventTopic)" --> Topics;
       Authors -- "Beat (AuthorTopic)" --> Topics;
       Users -- "Preferences (UserTopic)" --> Topics;
@@ -8,8 +9,13 @@
       Authors & Topics --> Articles;
       Segments -- Rights --> Users;
       Sessions --> Users;
-      Sessions & Articles --> PV(Page Views);
+      Sessions & Articles & Strategies --> PV(Page Views);
       Users -- Access --> PV;
+      end;
+      subgraph Class;
+      Players -- Membership --> Teams;
+      end;
+      Teams --> PV & Strategies;
 ```
 
 # Decision Process
