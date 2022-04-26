@@ -12,6 +12,12 @@ Session = sessionmaker(engine)
 mapper_registry = registry()
 Base = mapper_registry.generate_base()
 
+# not an ORM wrapper
+class BaseStrategy:
+    cost = 9
+    ads = 3
+    free_pvs = 12
+
 class AuthorTopic(Base):
     __tablename__ = 'author_topic'
     author_id = Column(ForeignKey('author.id'), primary_key=True)
@@ -133,13 +139,20 @@ class User(Base):
             td[user_topic.topic.name] = user_topic.prob
         return td
 
-    def pageview(self, db, day, article, duration, team):
+    def pageview(self, db, score, day, article, team, prior_pvs):
+        strategy = team.get_strategy_for_user(self, article, day)
+        duration = article.wordcount / 230 * 2 * score # 230 wpm of reading
+        saw_paywall = (len(prior_pvs) >= strategy.free_pvs)
+        converted = False
         db.add(
             Pageview(
                 team=team,
                 article=article,
                 day=day,
                 duration=duration,
+                ads_seen=strategy.ads,
+                saw_paywall=saw_paywall,
+                converted=converted,
                 user=self,
             )
         )
@@ -175,10 +188,9 @@ class User(Base):
                 ))
                 log_metric('pv_score', score)
                 if (score > score_cutoff):
-                    duration = article.wordcount / 230 * 2 * score # 230 wpm of reading
+                    self.pageview(db, score, day, article, team, articles_seen)
                     log_metric('pv_intent')
                     articles_clicked.append(article.id)
-                    self.pageview(db, day, article, duration, team)
                     # each subsequent article is harder to click
                     score_cutoff += score_stddev * 0.5
             pv_cache.append(team, self, articles_clicked)
@@ -191,7 +203,9 @@ class Pageview(Base):
     team_id = Column(Integer, ForeignKey('team.id'))
     day = Column(Integer)
     duration = Column(Integer)
+    ads_seen = Column(Integer)
     saw_paywall = Column(Boolean)
+    converted = Column(Boolean)
     user = relationship('User')
     article = relationship('Article')
     team = relationship('Team')
@@ -210,6 +224,21 @@ class Team(Base):
     game_id = Column(Integer, ForeignKey('game.id'))
     game = relationship('Game')
     strategies = relationship('Strategy', back_populates='team')
+    classified_users = relationship('UserStrategy', back_populates='team')
+
+    def get_strategy_for_user(self, user, article, day):
+        return BaseStrategy() # TODO: Strategy management
+
+class UserStrategy(Base):
+    __tablename__ = 'user_strategy'
+    team_id = Column(Integer, ForeignKey('team.id'), primary_key=True)
+    user_id = Column(Integer, ForeignKey('user.id'), primary_key=True)
+    strategy_id = Column(Integer, ForeignKey('strategy.id'))
+    start_day = Column(Integer)
+    end_day = Column(Integer) # not planning churn for now but tbd
+    team = relationship('Team')
+    user = relationship('User')
+    strategy = relationship('Strategy')
 
 class Strategy(Base):
     __tablename__ = 'strategy'

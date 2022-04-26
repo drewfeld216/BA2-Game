@@ -12,8 +12,8 @@ from metrics import get_metric
 fake = Faker()
 
 # Define some global parameters
-N_DAYS = 365*2
-N_DAYS_PERIOD_0 = 365
+N_DAYS = 30*2
+N_DAYS_PERIOD_0 = 30
 N_AUTHORS = 50
 N_USERS = 1000
 
@@ -45,22 +45,8 @@ def generate_authors():
     popularity = dirichlet.rvs(np.ones(N_AUTHORS)*10)[0]
     return zip(names, quality, popularity, topics)
 
-class UserSession:
-    def __init__(self, user_id, row, day, events, articles):
-        # here a user will accumulate one or more pageviews.
-        # each time a pageview is accumulated, the user and the pageview will be passed to a
-        # strategy object, which will determine if the user will be asked to pay, and if not,
-        # how many ads the user will show.
-        self.user = row
-        self.user.id = user_id
-        # dummy return value showing struct of a pageview
-    def pageview(article):
-        pass
-    def get_pageviews(self):
-        return [{ 'article_id': 0, 'user_id': self.user.id, 'day': day, 'duration': 90 }] # duration is in seconds
-
 # this has to have no memory so that we can use it during the simulation
-def generate_pvs(start, end):
+def generate_pvs(start = 0, end = N_DAYS_PERIOD_0):
     with Session() as db:
         game = db.get(Game, 1) # TODO: Make this a parameter
         for day in tqdm(range(start, end)):
@@ -103,7 +89,7 @@ def seed():
         # TODO: move this into its own set of commands or interface
         game = Game(name='Test Game', seed=123) # TODO: Use this seed
         session.add(game)
-        for t in ['austin', 'drew', 'daniel']:
+        for t in ['austin', 'drew']:
             team = Team(name=t, game=game)
             session.add(team)
             strategy = Strategy(team=team, cost=7.99, ads=4, free_pvs=10)
