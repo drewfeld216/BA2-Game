@@ -1,0 +1,3 @@
+*.pyc
+game.db
+.ipynb_checkpoints/
