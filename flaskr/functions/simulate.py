@@ -6,8 +6,9 @@ from scipy.stats import dirichlet, expon, uniform, norm
 from faker import Faker
 from sqlalchemy import select
 
-from models import Session, create_db, Topic, Author, AuthorTopic, Event, EventTopic, Article, User, UserTopic, UserAuthor, Game, Team, Strategy
-from metrics import get_metric
+from flaskr.db import create_db, Session
+from flaskr.models import Topic, Author, AuthorTopic, Event, EventTopic, Article, User, UserTopic, UserAuthor, Game, Team, Strategy
+from flaskr.functions.metrics import get_metric
 
 fake = Faker()
 
@@ -47,6 +48,7 @@ def generate_authors():
 
 # this has to have no memory so that we can use it during the simulation
 def generate_pvs(start = 0, end = N_DAYS_PERIOD_0):
+    print('Generating PageViews')
     with Session() as db:
         game = db.get(Game, 1) # TODO: Make this a parameter
         for day in tqdm(range(start, end)):
@@ -82,12 +84,12 @@ def generate_pvs(start = 0, end = N_DAYS_PERIOD_0):
         print(np.average(pv_scores))
         print(np.std(pv_scores))
 
-def seed():
-    create_db()
+def seed(game_name, rand_seed):
+    #create_db()
     with Session() as session:
 
         # TODO: move this into its own set of commands or interface
-        game = Game(name='Test Game', seed=123) # TODO: Use this seed
+        game = Game(name=game_name, seed=rand_seed) # TODO: Use this seed
         session.add(game)
         for t in ['austin', 'drew']:
             team = Team(name=t, game=game)

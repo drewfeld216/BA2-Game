@@ -1,0 +1,22 @@
+<table id="data" class="table table-striped">
+<thead>
+    <tr>
+    {% for h in headers %}
+        {% if not h[0] == '_' %}
+            <th>{{ h }}</th>
+        {% endif %}
+    {% endfor %}
+    </tr>
+</thead>
+<tbody>
+    {% for item in values %}
+    <tr>
+        {% for h in headers %}
+            {% if not h[0] == '_' %}
+                <td>{{ item[h] }}</td>
+            {% endif %}
+        {% endfor %}
+    </tr>
+    {% endfor %}
+</tbody>
+</table>

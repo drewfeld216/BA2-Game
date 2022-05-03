@@ -1,8 +1,8 @@
 import argparse
-from models import create_db
-from utils import draw_db
+from flaskr.db import create_db
+from flaskr.functions.utils import draw_db
 
-from simulate import seed, generate_pvs
+from flaskr.functions.simulate import seed, generate_pvs
 
 commands = {
     'create_db': lambda args: create_db(),

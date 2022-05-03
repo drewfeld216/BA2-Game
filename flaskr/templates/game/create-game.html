@@ -1,0 +1,30 @@
+<div class="container">
+
+    <div class="row">
+        <div class="col-md-4 col-md-offset-4">
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                </div>
+                <div class="panel-body">
+                    <form accept-charset="UTF-8" role="form" form action="" method="post">
+                        <fieldset>
+                            <div class="form-group">
+                                <label for="name">Game Name</label>
+                                <input class="form-control" placeholder="Spring 2022 Section 1" name="name" type="text" required="true" autofocus="true" value="{{ request.form.name }}">
+                            </div>
+                            <div class="form-group">
+                                <label for="seed">Game Seed</label>
+                                <input class="form-control" placeholder="123" name="seed" type="text" required="true" autofocus="true" value="{{ request.form.seed }}">
+                            </div>
+                            <div class="form-group">
+                                <label for="days">Seed Period Length (Days)</label>
+                                <input class="form-control" placeholder="365" name="days" type="text" required="true" autofocus="true" value="{{ request.form.days }}">
+                            </div>
+                            <input class="btn btn-md btn-success btn-block" type="submit" value="Create">
+                        </fieldset>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

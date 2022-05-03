@@ -1,16 +1,11 @@
 import itertools
 import random
 
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Float, Boolean, func, select
-from sqlalchemy.orm import registry, relationship, sessionmaker
+from sqlalchemy import Column, Integer, String, ForeignKey, Float, Boolean, func, select
+from sqlalchemy.orm import registry, relationship, sessionmaker, scoped_session
+from flaskr.db import Base
 
-from metrics import log_metric
-
-engine = create_engine('sqlite:///game.db')
-Session = sessionmaker(engine)
-
-mapper_registry = registry()
-Base = mapper_registry.generate_base()
+from flaskr.functions.metrics import log_metric
 
 # not an ORM wrapper
 class BaseStrategy:
@@ -252,8 +247,8 @@ class Strategy(Base):
 class Player(Base):
     __tablename__ = 'player'
     email = Column(String(50))
+    password = Column(String(50))
+    type = Column(String(20))
+    status = Column(String(20))
     id = Column(Integer, primary_key=True)
 
-def create_db():
-    mapper_registry.metadata.drop_all(engine)
-    mapper_registry.metadata.create_all(engine)
