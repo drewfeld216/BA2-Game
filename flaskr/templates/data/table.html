@@ -1,20 +1,16 @@
 <table id="data" class="table table-striped">
 <thead>
     <tr>
-    {% for h in headers %}
-        {% if not h[0] == '_' %}
-            <th>{{ h }}</th>
-        {% endif %}
+    {% for h in table.columns %}
+        <th>{{ h }}</th>
     {% endfor %}
     </tr>
 </thead>
 <tbody>
-    {% for item in values %}
+    {% for i,row in table.iterrows() %}
     <tr>
-        {% for h in headers %}
-            {% if not h[0] == '_' %}
-                <td>{{ item[h] }}</td>
-            {% endif %}
+        {% for h in table.columns %}
+            <td>{{ row[h] }}</td>
         {% endfor %}
     </tr>
     {% endfor %}
