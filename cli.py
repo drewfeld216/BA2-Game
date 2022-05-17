@@ -7,7 +7,7 @@ from simulate import seed, generate_pvs
 commands = {
     'create_db': lambda args: create_db(),
     'seed_db': lambda args: seed(),
-    'seed_pvs': lambda args: generate_pvs(0, 365),
+    'seed_pvs': lambda args: generate_pvs(),
     'draw_db': lambda args: draw_db()
 }
 

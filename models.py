@@ -127,11 +127,20 @@ class User(Base):
     first_day = Column(Integer)
     lifetime = Column(Integer)
     ad_sensitivity = Column(Float)
+    ad_blocked = Column(Boolean)
+
+    # gotta buy these
+    age = Column(Integer)
+    household_income = Column(Integer)
+    media_consumption = Column(Integer)
+    internet_usage_index = Column(Integer)
+
     game_id = Column(ForeignKey('game.id'))
     game = relationship('Game')
     topics = relationship('UserTopic', back_populates='user')
     authors = relationship('UserAuthor', back_populates='user')
     pageviews = relationship('Pageview', back_populates='user', lazy='dynamic')
+    teams = relationship('UserStrategy', back_populates='user', lazy='dynamic')
 
     def topics_dict(self):
         td = {}
@@ -142,8 +151,17 @@ class User(Base):
     def pageview(self, db, score, day, article, team, prior_pvs):
         strategy = team.get_strategy_for_user(self, article, day)
         duration = article.wordcount / 230 * 2 * score # 230 wpm of reading
-        saw_paywall = (len(prior_pvs) >= strategy.free_pvs)
+        saw_paywall = False
         converted = False
+        user_strategy = self.teams \
+            .filter(UserStrategy.team_id == team.id) \
+            .first()
+        if (not user_strategy):
+            saw_paywall = (len(prior_pvs) >= strategy.free_pvs)
+            if (saw_paywall):
+                converted = random.random() > 0.1 # one in ten chance of converting
+                if (converted):
+                    db.add(UserStrategy(team=team, user=self, strategy=strategy, start_day=day))
         db.add(
             Pageview(
                 team=team,
@@ -227,7 +245,7 @@ class Team(Base):
     classified_users = relationship('UserStrategy', back_populates='team')
 
     def get_strategy_for_user(self, user, article, day):
-        return BaseStrategy() # TODO: Strategy management
+        return self.strategies[0] # TODO: Strategy management
 
 class UserStrategy(Base):
     __tablename__ = 'user_strategy'
