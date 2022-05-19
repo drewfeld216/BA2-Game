@@ -1,5 +1,15 @@
+import numpy as np
+from faker import Faker
+import json
+
+
+
+
+
 import itertools
 import random
+
+import pandas as pd
 
 from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Float, Boolean, func, select
 from sqlalchemy.orm import registry, relationship, sessionmaker
@@ -11,6 +21,10 @@ Session = sessionmaker(engine)
 
 mapper_registry = registry()
 Base = mapper_registry.generate_base()
+
+def run_sql(s):
+    with engine.connect() as con:
+        return pd.DataFrame(con.execute(s).fetchall())
 
 # not an ORM wrapper
 class BaseStrategy:
@@ -229,11 +243,135 @@ class Pageview(Base):
     team = relationship('Team')
 
 class Game(Base):
+    '''
+    This class describes a specific game. In addition to trivial
+    game details, it includes the game's randomization engine,
+    which works as follows
+      - When the game is created, a seed is provided
+      - The np random number generator (used by np) and the random
+        random number generator (used by faker) are initialized
+        with that seed
+      - The state of both random number generators are serialized
+        into the database (columns np_state and random_state
+        respectively)
+      - Whenever a random number needs to be generated for the game,
+        the generate_rv function should be used - it loads the
+        serialized state from the database, generated the RVs, and
+        then saves the new state back. This ensures that even if
+        other RVs are generated outside the class, we "pick up" again
+        from where we left of the last time we ran generate_rv
+    '''
     __tablename__ = 'game'
-    id = Column(Integer, primary_key=True)
-    seed = Column(Integer)
-    name = Column(String(50))
-    teams = relationship('Team', back_populates='game')
+    
+    id           = Column(Integer, primary_key=True)
+    seed         = Column(Integer)
+    name         = Column(String(50))
+                 
+    np_state     = Column(String(10000), default='')
+    random_state = Column(String(10000), default='')
+    
+    teams        = relationship('Team', back_populates='game')
+    
+    fake         = Faker()
+    
+    def __init__(self, **kwargs):
+        '''
+        First, initialize the class using __init__ in the super class.
+        Then, set the numpy and random seeds to the specified seed, and
+        save the state of the generators into the database
+        '''
+        super(Game, self).__init__(**kwargs)
+        
+        # Set the numpy and faker random seeds
+        np.random.seed(self.seed)
+        self.fake.random.seed(self.seed)
+        
+        # Save the state of both randomization techniques into
+        # the database
+        self.save_random_state()
+        
+    def save_random_state(self):
+        '''
+        This function takes the current state of the numpy and random
+        random number generators, serializes them, and save them into
+        the database
+        '''
+        
+        # Save the np state (note that np_state[1] is an ndarray which
+        # can't be serialized, so we need to convert it to a list
+        # first
+        np_state      = list(np.random.get_state())
+        np_state[1]   = np_state[1].tolist()
+        self.np_state = json.dumps(np_state)
+        
+        # Save the random state
+        self.random_state = json.dumps(self.fake.random.getstate())
+    
+    def load_random_state(self):
+        '''
+        This function takes the state of the numpy and random random
+        number generators in the database, and uses them to set the
+        current state of these generators
+        '''
+        
+        # Load the np state from the database and set it
+        np.random.set_state(json.loads(self.np_state))
+        
+        # Load the random state from the database and set it
+        # (setstate requires the second element to be a tuple, hence
+        # our conversion
+        random_state    = json.loads(self.random_state)
+        random_state[1] = tuple(random_state[1])
+        self.fake.random.setstate(random_state)
+    
+    def generate_rv(self, kind, n=1, **kwargs):
+        '''
+        This function loads the current state of the random number
+        generators from the database, generates the variables we
+        need, and then saves the new state back. This ensures that
+        even if other random variables were generated outside this
+        function since the last time it was called, we always pick
+        up again from the last time it was called
+        
+        To make sure we don't upset any operations outside this
+        class, we save the random states before the function runs,
+        and then reset them at the end
+        '''
+        
+        # Dictionary mapping each variable type to a function
+        # which generates that RV
+        rv_kinds = {'uniform'     : lambda                : np.random.uniform(size=n),
+                    'exponential' : lambda loc=0, scale=1 : np.random.exponential(size=n)*scale + loc,
+                    'normal'      : lambda loc=0, scale=1 : np.random.normal(loc=loc, scale=scale, size=n),
+                    'dirichlet'   : lambda alpha          : np.random.dirichlet(alpha=alpha, size=n),
+                    'name'        : lambda                : [self.fake.name() for i in range(n)],
+                    'ipv4'        : lambda                : [self.fake.ipv4() for i in range(n)],
+                    'user_agent'  : lambda                : [self.fake.user_agent() for i in range(n)]}
+    
+        # Save the random state so we can restore it afterwards
+        np_state     = np.random.get_state()
+        random_state = self.fake.random.getstate()
+    
+        # Load the random state
+        self.load_random_state()
+        
+        # Generate the RV
+        out = rv_kinds[kind](**kwargs)
+        
+        # If the size is 1, extract the first element in the
+        # list/array to return a scalar
+        if n == 1:
+            out = out[0]
+        
+        # Save the random state
+        self.save_random_state()
+        
+        # Restore the original random state
+        np.random.set_state(np_state)
+        self.fake.random.setstate(random_state)
+        
+        # Return
+        return out
 
 class Team(Base):
     __tablename__ = 'team'
