@@ -134,6 +134,11 @@ def generate_rv(obj, kind, n=1, **kwargs):
     return out
 
 class Rand_utils_mixin():
-
+    '''
+    This class can be inherited to endow any other class with a generate_rv
+    function that automatically uses and updatesthe parent class' random_state
+    to generate random variables
+    '''
+    
     def generate_rv(self, kind, n=1, **kwargs):
         return generate_rv(self, kind, n, **kwargs)

@@ -1,5 +1,7 @@
 import rand_utils
 
+import sqlalchemy as sa
+import sqlalchemy.orm as sa_orm
 
 
 import itertools
@@ -7,16 +9,16 @@ import random
 
 import pandas as pd
 
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Float, Boolean, func, select
-from sqlalchemy.orm import registry, relationship, sessionmaker
+from sqlalchemy import Column, Integer, String, ForeignKey, Float, Boolean, func, select
+from sqlalchemy.orm import relationship
 
 from metrics import log_metric
 
-engine = create_engine('sqlite:///game.db')
-Session = sessionmaker(engine)
+engine          = sa.create_engine('sqlite:///game.db')
+Session         = sa_orm.sessionmaker(engine)
 
-mapper_registry = registry()
-Base = mapper_registry.generate_base()
+mapper_registry = sa_orm.registry()
+Base            = mapper_registry.generate_base()
 
 def run_sql(s):
     with engine.connect() as con:
@@ -129,28 +131,36 @@ class PVCache:
 pv_cache = PVCache()
 
 class User(Base):
+    '''
+    This class represents a single user, associated with one specific
+    game
+    '''
+    
     __tablename__ = 'user'
-    id = Column(Integer, primary_key=True)
-    ip = Column(String(20))
-    agent = Column(String(100))
-    freq = Column(Integer)
-    first_day = Column(Integer)
-    lifetime = Column(Integer)
-    ad_sensitivity = Column(Float)
-    ad_blocked = Column(Boolean)
+    
+    id             = sa.Column(sa.Integer, primary_key=True)
+    game_id        = sa.Column(sa.ForeignKey('game.id'))
+    
+    # Basic attributes
+    ip             = sa.Column(String(20))
+    agent          = sa.Column(String(100))
+    freq           = sa.Column(Integer)
+    first_day      = sa.Column(Integer)
+    lifetime       = sa.Column(Integer)
+    ad_sensitivity = sa.Column(Float)
+    ad_blocked     = sa.Column(Boolean)
 
-    # gotta buy these
-    age = Column(Integer)
-    household_income = Column(Integer)
-    media_consumption = Column(Integer)
-    internet_usage_index = Column(Integer)
+    # Attributes that need to be purhcased
+    age                  = sa.Column(sa.Integer)
+    household_income     = sa.Column(sa.Integer)
+    media_consumption    = sa.Column(sa.Integer)
+    internet_usage_index = sa.Column(sa.Integer)
 
-    game_id = Column(ForeignKey('game.id'))
-    game = relationship('Game')
-    topics = relationship('UserTopic', back_populates='user')
-    authors = relationship('UserAuthor', back_populates='user')
+    game      = relationship('Game')
+    topics    = relationship('UserTopic', back_populates='user')
+    authors   = relationship('UserAuthor', back_populates='user')
     pageviews = relationship('Pageview', back_populates='user', lazy='dynamic')
-    teams = relationship('UserStrategy', back_populates='user', lazy='dynamic')
+    teams     = relationship('UserStrategy', back_populates='user', lazy='dynamic')
 
     def topics_dict(self):
         td = {}
@@ -224,39 +234,46 @@ class User(Base):
             pv_cache.append(team, self, articles_clicked)
 
 class Pageview(Base):
+    '''
+    This class represents a pageview in the came, associated with a
+    specific user, article, and team (different teams might experience
+    different views for the same article)
+    '''
+    
     __tablename__ = 'pageview'
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey('user.id'))
-    article_id = Column(Integer, ForeignKey('article.id'))
-    team_id = Column(Integer, ForeignKey('team.id'))
-    day = Column(Integer)
-    duration = Column(Integer)
-    ads_seen = Column(Integer)
+    
+    id          = sa.Column(Integer, primary_key=True)
+    user_id     = sa.Column(sa.Integer, sa.ForeignKey('user.id'))
+    article_id  = Column(Integer, sa.ForeignKey('article.id'))
+    team_id     = Column(Integer, sa.ForeignKey('team.id'))
+    day         = Column(Integer)
+    duration    = Column(Integer)
+    ads_seen    = Column(Integer)
     saw_paywall = Column(Boolean)
-    converted = Column(Boolean)
-    user = relationship('User')
-    article = relationship('Article')
-    team = relationship('Team')
+    converted   = Column(Boolean)
+    
+    user        = relationship('User')
+    article     = relationship('Article')
+    team        = relationship('Team')
 
 class Game(Base, rand_utils.Rand_utils_mixin):
     '''
-    This class describes a specific game. In addition to trivial
-    game details, it includes the game's randomization engine; see
-    rand_utils.py for an explanation.
+    This class describes a specific game.
     
-    The mixin parent classes endows this object with a generate_rv
-    method, which can be used for convenience to generate random
-    variables and keep the random state up to date
+    random_state holds the class' random state, and rand_utils.Rand_utils_mixin
+    endows this object with a generate_rv method, which can be used for
+    convenience to generate random variables and keep the random state up to date
     '''
+    
     __tablename__ = 'game'
     
-    id           = Column(Integer, primary_key=True)
-    seed         = Column(Integer, nullable=False)
-    name         = Column(String(50))
+    id           = sa.Column(sa.Integer, primary_key=True)
+    seed         = sa.Column(sa.Integer, nullable=False)
+    name         = sa.Column(sa.String(50))
     
-    random_state = Column(String(20000), default='')
+    random_state = sa.Column(sa.String(20000), default='')
     
-    teams        = relationship('Team', back_populates='game')
+    teams        = sa_orm.relationship('Team', back_populates='game')
 
     def __init__(self, **kwargs):
         '''
@@ -266,43 +283,99 @@ class Game(Base, rand_utils.Rand_utils_mixin):
         super(Game, self).__init__(**kwargs)
         
         rand_utils.init_random_state(self)
-        
-class Team(Base):
-    __tablename__ = 'team'
-    id = Column(Integer, primary_key=True)
-    name = Column(String(50))
-    game_id = Column(Integer, ForeignKey('game.id'))
-    game = relationship('Game')
-    strategies = relationship('Strategy', back_populates='team')
-    classified_users = relationship('UserStrategy', back_populates='team')
-
-    def get_strategy_for_user(self, user, article, day):
-        return self.strategies[0] # TODO: Strategy management
-
+    
 class UserStrategy(Base):
+    '''
+    This class denotes the application of a strategy to a user for a
+    specific period of time. Each strategy/user combination might appear
+    more than once if a strategy applies to a user in two distinct periods
+    '''
+    
     __tablename__ = 'user_strategy'
-    team_id = Column(Integer, ForeignKey('team.id'), primary_key=True)
-    user_id = Column(Integer, ForeignKey('user.id'), primary_key=True)
-    strategy_id = Column(Integer, ForeignKey('strategy.id'))
-    start_day = Column(Integer)
-    end_day = Column(Integer) # not planning churn for now but tbd
-    team = relationship('Team')
-    user = relationship('User')
-    strategy = relationship('Strategy')
+    
+    id          = sa.Column(sa.Integer, primary_key=True)
+    user_id     = sa.Column(sa.ForeignKey('user.id'))
+    strategy_id = sa.Column(sa.ForeignKey('strategy.id'))
+    start_day   = sa.Column(sa.Integer)
+    end_day     = sa.Column(sa.Integer)
+    
+    user        = sa_orm.relationship('User')
+    strategy    = sa_orm.relationship('Strategy')
 
 class Strategy(Base):
+    '''
+    This class describes a strategy. Each strategy belongs to a
+    team, and can be applied to a number of users
+    '''
+
     __tablename__ = 'strategy'
-    id = Column(Integer, primary_key=True)
-    team_id = Column(Integer, ForeignKey('team.id'))
-    cost = Column(Float)
-    ads = Column(Integer)
-    free_pvs = Column(Integer)
-    team = relationship('Team')
+    
+    id       = sa.Column(Integer, primary_key=True)
+    team_id  = sa.Column(Integer, ForeignKey('team.id'))
+    cost     = sa.Column(Float)
+    ads      = sa.Column(Integer)
+    free_pvs = sa.Column(Integer)
+    
+    team     = sa_orm.relationship('Team')
+
+class PlayerTeam(Base):
+    '''
+    This class denotes the fact a player should have access to
+    a specific team. It is a many-to-many association table
+    '''
+    
+    __tablename__ = 'player_team'
+    
+    player_id = sa.Column(sa.ForeignKey('player.id'), primary_key=True)
+    team_id   = sa.Column(sa.ForeignKey('team.id'), primary_key=True)
 
 class Player(Base):
+    '''
+    Player email, hashed password, etc...
+    '''
+    
     __tablename__ = 'player'
-    email = Column(String(50))
-    id = Column(Integer, primary_key=True)
+    
+    id              = sa.Column(sa.Integer, primary_key=True)
+    email           = sa.Column(sa.String(50), nullable=False)
+    hashed_password = sa.Column(sa.String(50), nullable=False)
+    
+    teams = sa_orm.relationship('Team', secondary='player_team', back_populates='players')
+
+class Team(Base, rand_utils.Rand_utils_mixin):
+    '''
+    This class describes a specific team, in a specific game.
+    
+    Each team will have its own randomization engine, initialized with the same seed
+    as the game randomization engine, to ensure that one team's actions do not in any
+    way impact the random path that will be observed by another team.
+    
+    random_state holds the class' random state, and rand_utils.Rand_utils_mixin
+    endows this object with a generate_rv method, which can be used for
+    convenience to generate random variables and keep the random state up to date
+    '''
+
+    __tablename__ = 'team'
+    
+    id               = sa.Column(Integer, primary_key=True)
+    name             = sa.Column(String(50))
+    game_id          = sa.Column(Integer, ForeignKey('game.id'))
+    
+    random_state     = sa.Column(String(20000), default='')
+    
+    game             = sa_orm.relationship('Game', back_populates='teams')
+    strategies       = sa_orm.relationship('Strategy', back_populates='team')
+    players          = sa_orm.relationship('Player', back_populates='player_team', back_populates='teams')
+    
+    def __init__(self, **kwargs):
+        '''
+        First, initialize the class using __init__ in the super class.
+        Then, initialize the random state using the parent game's seed
+        '''
+        super(Game, self).__init__(**kwargs)
+        
+        self.seed = self.game.seed
+        rand_utils.init_random_state(self) 
 
 def create_db():
     mapper_registry.metadata.drop_all(engine)
