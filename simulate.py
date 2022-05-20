@@ -12,10 +12,7 @@ from metrics import get_metric
 fake = Faker()
 
 # Define some global parameters
-N_DAYS = 30*2
-N_DAYS_PERIOD_0 = 30
-N_AUTHORS = 50
-N_USERS = 1000
+
 
 # Static definition of topics
 
@@ -85,19 +82,27 @@ def initiate_game(game):
     TOPIC_NAMES = ['Opinion', 'Politics', 'World Events', 'Business', 'Technology', 'Arts & Culture', 'Sports', 'Health', 'Home', 'Travel', 'Fashion', 'Food']
     TOPIC_FREQS = [0.1, 0.1, 0.1, 0.1, 0.08, 0.08, 0.08, 0.08, 0.08, 0.07, 0.07, 0.06]
 
+    N_DAYS = 30*2
+    N_DAYS_PERIOD_0 = 30
+    n_authors = 50
+    N_USERS = 1000
 
     with Session() as db:
         # Create the topics
         print('Generating topics')
         
         for t_name, t_freq in zip(TOPIC_NAMES, TOPIC_FREQS):
-            db.add(m.Topic(name=t_name, t_freq, game=game))
+            db.add(m.Topic(name=t_name, freq=t_freq, game=game))
         
         db.commit()
         
         # Create the authors
         print('Generating authors')
         
+        for a in range(n_authors):
+            db.add(m.Author(name       = game.generate_rv('name'),
+                            quality    = game.generate_rv('uniform')*10,
+                            popularity = 
         
         
         def generate_authors():

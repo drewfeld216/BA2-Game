@@ -9,8 +9,8 @@ import random
 
 import pandas as pd
 
-from sqlalchemy import Column, Integer, String, ForeignKey, Float, Boolean, func, select
-from sqlalchemy.orm import relationship
+#from sqlalchemy import Column, Integer, String, ForeignKey, Float, Boolean, func, select
+#from sqlalchemy.orm import relationship
 
 from metrics import log_metric
 
@@ -82,22 +82,22 @@ class Team(Base, rand_utils.Rand_utils_mixin):
 
     __tablename__ = 'team'
     
-    id               = sa.Column(Integer, primary_key=True)
-    name             = sa.Column(String(50))
-    game_id          = sa.Column(Integer, ForeignKey('game.id'))
+    id               = sa.Column(sa.Integer, primary_key=True)
+    name             = sa.Column(sa.String(50))
+    game_id          = sa.Column(sa.ForeignKey('game.id'))
     
-    random_state     = sa.Column(String(20000), default='')
+    random_state     = sa.Column(sa.String(20000), default='')
     
     game             = sa_orm.relationship('Game', back_populates='teams')
     strategies       = sa_orm.relationship('Strategy', back_populates='team')
-    players          = sa_orm.relationship('Player', back_populates='player_team', back_populates='teams')
+    players          = sa_orm.relationship('Player', secondary='player_team', back_populates='teams')
     
     def __init__(self, **kwargs):
         '''
         First, initialize the class using __init__ in the super class.
         Then, initialize the random state using the parent game's seed
         '''
-        super(Game, self).__init__(**kwargs)
+        super(Team, self).__init__(**kwargs)
         
         self.seed = self.game.seed
         rand_utils.init_random_state(self) 
@@ -128,13 +128,13 @@ class User(Base):
     game_id        = sa.Column(sa.ForeignKey('game.id'))
     
     # Basic attributes
-    ip             = sa.Column(String(20))
-    agent          = sa.Column(String(100))
-    freq           = sa.Column(Integer)
-    first_day      = sa.Column(Integer)
-    lifetime       = sa.Column(Integer)
-    ad_sensitivity = sa.Column(Float)
-    ad_blocked     = sa.Column(Boolean)
+    ip             = sa.Column(sa.String(20))
+    agent          = sa.Column(sa.String(100))
+    freq           = sa.Column(sa.Integer)
+    first_day      = sa.Column(sa.Integer)
+    lifetime       = sa.Column(sa.Integer)
+    ad_sensitivity = sa.Column(sa.Float)
+    ad_blocked     = sa.Column(sa.Boolean)
 
     # Attributes that need to be purhcased
     age                  = sa.Column(sa.Integer)
@@ -142,11 +142,11 @@ class User(Base):
     media_consumption    = sa.Column(sa.Integer)
     internet_usage_index = sa.Column(sa.Integer)
 
-    game       = relationship('Game')
-    topics     = relationship('Topics', secondary='user_topic')
-    authors    = relationship('Authors', secondary='user_author')
-    pageviews  = relationship('Pageview', back_populates='user', lazy='dynamic')
-    strategies = relationship('Strategy', secondary='user_strategy', back_populates='users', lazy='dynamic')
+    game       = sa_orm.relationship('Game')
+    topics     = sa_orm.relationship('Topic', secondary='user_topic')
+    authors    = sa_orm.relationship('Author', secondary='user_author')
+    pageviews  = sa_orm.relationship('Pageview', back_populates='user', lazy='dynamic')
+    strategies = sa_orm.relationship('Strategy', secondary='user_strategy', back_populates='users', lazy='dynamic')
 
     def topics_dict(self):
         td = {}
@@ -228,19 +228,19 @@ class Pageview(Base):
     
     __tablename__ = 'pageview'
     
-    id          = sa.Column(Integer, primary_key=True)
+    id          = sa.Column(sa.Integer, primary_key=True)
     user_id     = sa.Column(sa.Integer, sa.ForeignKey('user.id'))
-    article_id  = Column(Integer, sa.ForeignKey('article.id'))
-    team_id     = Column(Integer, sa.ForeignKey('team.id'))
-    day         = Column(Integer)
-    duration    = Column(Integer)
-    ads_seen    = Column(Integer)
-    saw_paywall = Column(Boolean)
-    converted   = Column(Boolean)
+    article_id  = sa.Column(sa.Integer, sa.ForeignKey('article.id'))
+    team_id     = sa.Column(sa.Integer, sa.ForeignKey('team.id'))
+    day         = sa.Column(sa.Integer)
+    duration    = sa.Column(sa.Integer)
+    ads_seen    = sa.Column(sa.Integer)
+    saw_paywall = sa.Column(sa.Boolean)
+    converted   = sa.Column(sa.Boolean)
     
-    user        = relationship('User', backpopulates='pageviews')
-    article     = relationship('Article')
-    team        = relationship('Team')
+    user        = sa_orm.relationship('User', back_populates='pageviews')
+    article     = sa_orm.relationship('Article')
+    team        = sa_orm.relationship('Team')
 
 class Strategy(Base):
     '''
@@ -250,11 +250,11 @@ class Strategy(Base):
 
     __tablename__ = 'strategy'
     
-    id       = sa.Column(Integer, primary_key=True)
-    team_id  = sa.Column(Integer, ForeignKey('team.id'))
-    cost     = sa.Column(Float)
-    ads      = sa.Column(Integer)
-    free_pvs = sa.Column(Integer)
+    id       = sa.Column(sa.Integer, primary_key=True)
+    team_id  = sa.Column(sa.Integer, sa.ForeignKey('team.id'))
+    cost     = sa.Column(sa.Float)
+    ads      = sa.Column(sa.Integer)
+    free_pvs = sa.Column(sa.Integer)
     
     team     = sa_orm.relationship('Team')
     users    = sa_orm.relationship('User', secondary='user_strategy', back_populates='strategies')
@@ -273,9 +273,9 @@ class Topic(Base):
     game_id = sa.Column(sa.ForeignKey('game.id'))
     
     game    = sa_orm.relationship('Game', back_populates='topics')
-    authors = sa_orm.relationship('AuthorTopic', back_populates='topics')
+    authors = sa_orm.relationship('Author', secondary='author_topic', back_populates='topics')
     events  = sa_orm.relationship('Event', secondary='event_topic', back_populates='topics')
-    users   = sa_orm.relationship('User', secondary='user_topic', back_populates='topic')
+    users   = sa_orm.relationship('User', secondary='user_topic', back_populates='topics')
 
 class Event(Base):
     '''
@@ -292,7 +292,7 @@ class Event(Base):
     game_id   = sa.Column(sa.ForeignKey('game.id'))
     
     game      = sa_orm.relationship('Game')
-    topics    = sa_orm.relationship('Topic', secondary='event_topic', back_populates='event')
+    topics    = sa_orm.relationship('Topic', secondary='event_topic', back_populates='events')
 
 class Author(Base):
     '''
@@ -310,7 +310,7 @@ class Author(Base):
     
     game       = sa_orm.relationship('Game')
     topics     = sa_orm.relationship('Topic', secondary='author_topic', back_populates='authors')
-    users      = sa_orm.relationship('User', secondary='user_topic', back_populates='authors')
+    users      = sa_orm.relationship('User', secondary='user_author', back_populates='authors')
 
     def topic_by_id(self, topic_id):
         for t in self.topics:
@@ -318,16 +318,22 @@ class Author(Base):
                 return t
 
 class Article(Base):
+    '''
+    Article
+    '''
+    
     __tablename__ = 'article'
-    id = Column(Integer, primary_key=True)
-    topic_id = Column(Integer, ForeignKey('topic.id'))
-    author_id = Column(Integer, ForeignKey('author.id'))
-    day = Column(Integer)
-    wordcount = Column(Integer)
-    game_id = Column(ForeignKey('game.id'))
-    game = relationship('Game')
-    topic = relationship('Topic')
-    author = relationship('Author')
+    
+    id        = sa.Column(sa.Integer, primary_key=True)
+    topic_id  = sa.Column(sa.ForeignKey('topic.id'))
+    author_id = sa.Column(sa.ForeignKey('author.id'))
+    day       = sa.Column(sa.Integer)
+    wordcount = sa.Column(sa.Integer)
+    game_id   = sa.Column(sa.ForeignKey('game.id'))
+    
+    game      = sa_orm.relationship('Game')
+    topic     = sa_orm.relationship('Topic')
+    author    = sa_orm.relationship('Author')
 
 
 # --------------------------------------
@@ -345,9 +351,6 @@ class AuthorTopic(Base):
     author_id = sa.Column(sa.ForeignKey('author.id'), primary_key=True)
     topic_id = sa.Column(sa.ForeignKey('topic.id'), primary_key=True)
     affinity = sa.Column(sa.Float)
-    
-    author = sa_orm.relationship("Author")
-    topic  = sa_orm.relationship("Topic")
 
 class EventTopic(Base):
     '''
@@ -361,9 +364,6 @@ class EventTopic(Base):
     topic_id  = sa.Column(sa.ForeignKey('topic.id'), primary_key=True)
     
     relevance = sa.Column(sa.Float)
-    
-    event     = relationship("Event")
-    topic     = relationship("Topic")
 
 class UserTopic(Base):
     '''
@@ -373,13 +373,10 @@ class UserTopic(Base):
     
     __tablename__ = 'user_topic'
     
-    user_id  = Column(ForeignKey('user.id'), primary_key=True)
-    topic_id = Column(ForeignKey('topic.id'), primary_key=True)
+    user_id  = sa.Column(sa.ForeignKey('user.id'), primary_key=True)
+    topic_id = sa.Column(sa.ForeignKey('topic.id'), primary_key=True)
     
-    affinity = Column(Float)
-    
-    user     = relationship("User")
-    topic    = relationship("Topic")
+    affinity = sa.Column(sa.Float)
 
 # Doesn't strictly need to be defined as a model but it will be
 # easier to add more signals on this relationship later if it is.
@@ -392,11 +389,8 @@ class UserAuthor(Base):
     
     __tablename__ = 'user_author'
     
-    user_id   = Column(ForeignKey('user.id'), primary_key=True)
-    author_id = Column(ForeignKey('author.id'), primary_key=True)
-    
-    user   = relationship("User")
-    author = relationship("Author")
+    user_id   = sa.Column(sa.ForeignKey('user.id'), primary_key=True)
+    author_id = sa.Column(sa.ForeignKey('author.id'), primary_key=True)
 
 class UserStrategy(Base):
     '''
@@ -412,9 +406,6 @@ class UserStrategy(Base):
     strategy_id = sa.Column(sa.ForeignKey('strategy.id'))
     start_day   = sa.Column(sa.Integer)
     end_day     = sa.Column(sa.Integer)
-    
-    user        = sa_orm.relationship('User')
-    strategy    = sa_orm.relationship('Strategy')
 
 class PlayerTeam(Base):
     '''
