@@ -18,9 +18,8 @@ N_AUTHORS = 50
 N_USERS = 1000
 
 # Static definition of topics
-TOPIC_NAMES = ['Opinion', 'Politics', 'World Events', 'Business', 'Technology', 'Arts & Culture', 'Sports', 'Health', 'Home', 'Travel', 'Fashion', 'Food']
+
 TOPIC_ALPHAS = np.ones(len(TOPIC_NAMES))
-TOPIC_PROBS = np.array([[0.1, 0.1, 0.1, 0.1, 0.08, 0.08, 0.08, 0.08, 0.08, 0.07, 0.07, 0.06]])
 
 # 1. Topics DONE
 # 2. Authors DONE
@@ -82,6 +81,35 @@ def generate_pvs(start = 0, end = N_DAYS_PERIOD_0):
         print(np.average(pv_scores))
         print(np.std(pv_scores))
 
+def initiate_game(game):
+    TOPIC_NAMES = ['Opinion', 'Politics', 'World Events', 'Business', 'Technology', 'Arts & Culture', 'Sports', 'Health', 'Home', 'Travel', 'Fashion', 'Food']
+    TOPIC_FREQS = [0.1, 0.1, 0.1, 0.1, 0.08, 0.08, 0.08, 0.08, 0.08, 0.07, 0.07, 0.06]
+
+
+    with Session() as db:
+        # Create the topics
+        print('Generating topics')
+        
+        for t_name, t_freq in zip(TOPIC_NAMES, TOPIC_FREQS):
+            db.add(m.Topic(name=t_name, t_freq, game=game))
+        
+        db.commit()
+        
+        # Create the authors
+        print('Generating authors')
+        
+        
+        
+        def generate_authors():
+    names = [fake.name() for i in range(N_AUTHORS)]
+    quality = [uniform.rvs()*10 for i in range(N_AUTHORS)]
+    topics = np.array([dirichlet.rvs(TOPIC_ALPHAS)[0] for auth in names])
+    popularity = dirichlet.rvs(np.ones(N_AUTHORS)*10)[0]
+    return zip(names, quality, popularity, topics)
+        
+        
+        
+
 def seed():
     create_db()
     with Session() as session:
@@ -96,14 +124,7 @@ def seed():
             session.add(strategy)
         session.commit()
 
-        topics = []
-        authors = []
-        print('Generating Topics')
-        for topic_name, prob in generate_topics():
-            t = Topic(name=topic_name, prob=prob, game=game)
-            topics.append(t)
-            session.add(t)
-        session.commit()
+        
 
         print('Generating Authors')
         for author_name, quality, popularity, topic_probs in generate_authors():
