@@ -317,18 +317,6 @@ class Author(Base):
             if t.topic_id == topic_id:
                 return t
 
-def generate_authors
-    def simulate_author(self):
-        '''
-        Randomly simulates author characteristics
-        '''
-        
-        self.name        = self.game.generate_rv('name')
-        self.quality     = self.game.generate_rv('uniform')*10
-        self.popularity  = self.game.generate_rv(
-        self.topics      = 
-        self.popularity
-
 class Article(Base):
     __tablename__ = 'article'
     id = Column(Integer, primary_key=True)
