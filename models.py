@@ -114,7 +114,7 @@ class Author(Base):
     quality           = sa.Column(sa.Integer)
     productivity      = sa.Column(sa.Integer)
     
-    game              = sa_orm.relationship('Game')
+    game              = sa_orm.relationship('Game', back_populates='authors')
     topic_expertises  = sa_orm.relationship('AuthorTopic', back_populates='author')
 
     def topic_by_id(self, topic_id):
@@ -143,8 +143,8 @@ class Event(Base):
     intensity         = sa.Column(sa.Integer)
     game_id           = sa.Column(sa.ForeignKey('game.id'))
     
-    game              = sa_orm.relationship('Game')
-    topic_relevances  = sa_orm.relationship('EventTopic',back_populates='events')
+    game              = sa_orm.relationship('Game', back_populates='events')
+    topic_relevances  = sa_orm.relationship('EventTopic',back_populates='event')
     
     def topic_intensities(self, day):
         '''
@@ -191,15 +191,17 @@ class Game(Base, rand_utils.Rand_utils_mixin):
     name         = sa.Column(sa.String(50))
     
     # Simulation parameters
-    n_days       = sa.Column(sa.Integer)
-    n_days_p0    = sa.Column(sa.Integer)
-    n_authors    = sa.Column(sa.Integer)
-    n_users      = sa.Column(sa.Integer)
+    n_days       = sa.Column(sa.Integer, nullable=False)
+    n_days_p0    = sa.Column(sa.Integer, nullable=False)
+    n_authors    = sa.Column(sa.Integer, nullable=False)
+    n_users      = sa.Column(sa.Integer, nullable=False)
     
     random_state = sa.Column(sa.String(20000), default='')
     
     teams        = sa_orm.relationship('Team', back_populates='game')
     topics       = sa_orm.relationship('Topic', back_populates='game')
+    authors      = sa_orm.relationship('Author', back_populates='game')
+    events       = sa_orm.relationship('Event', back_populates='game')
 
     def __init__(self, **kwargs):
         '''

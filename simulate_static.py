@@ -1,3 +1,4 @@
+import numpy as np
 
 # ---------------------------------
 # -  Section 1; base elements     -
@@ -19,7 +20,7 @@ def article_vocab(game):
     Generates the vocabulary complexity of an article using
     the randomization engine in the game
     '''
-    return np.max(0, np.min(1, game.generate_rv('normal', loc=0.5, scale=0.2)))
+    return np.max(0, np.minimum(1, game.generate_rv('normal', loc=0.5, scale=0.2)))
 
 # Author
 # ------
@@ -48,7 +49,7 @@ def add_author_productivities(game):
     # be roughly evenly split between authors
     alpha = np.ones(len(game.authors))*1
     
-    for a, productivity in zip(game.authors, game.generate_rvs('dirichlet',
+    for a, productivity in zip(game.authors, game.generate_rv('dirichlet',
                                                                alpha=alpha)):
         a.productivity = productivity
     
@@ -72,7 +73,7 @@ def event_intensity(game):
     then decreases until 10, where there is a small bump in
     probability because of the np.min
     '''
-    return np.min(10, game.generate_rv('exponential', loc=1, scale=2))
+    return np.minimum(10, game.generate_rv('exponential', loc=1, scale=2))
     
 # --------------------------------------
 # -  Section 2; many-to-many tables    -
@@ -90,9 +91,9 @@ def add_author_expertises(author, game):
     
     # Create an alpha parameter that ensures expertise will be highly
     # concentrated on some topics
-    alpha = np.ones(len(author.topic_expertises))*0.5
+    alpha = np.ones(len(author.topic_expertises))*0.3
     
-    for t_e, expertise in zip(author.topic_expertises, game.generate_rvs('dirichlet',
+    for t_e, expertise in zip(author.topic_expertises, game.generate_rv('dirichlet',
                                                                          alpha=alpha)):
         t_e.expertise = expertise
 
@@ -106,14 +107,14 @@ def add_author_productivities(game):
     # be roughly evenly split between authors
     alpha = np.ones(len(game.authors))*1
     
-    for a, productivity in zip(game.authors, game.generate_rvs('dirichlet',
+    for a, productivity in zip(game.authors, game.generate_rv('dirichlet',
                                                                alpha=alpha)):
         a.productivity = productivity
 
 # EventTopic
 # ----------
 
-def event_topic_relevances(game):
+def add_event_relevances(author, game):
     '''
     This function generates a dictionary of topic relevances
     for an event, one for each topic. The list of topic is
@@ -123,8 +124,9 @@ def event_topic_relevances(game):
     
     # Create an alpha parameter that ensures more relevance
     # will be concentrated on a few topics
-    alpha = np.ones(len(game.topics))*0.2
+    alpha = np.ones(len(game.topics))*0.3
     
-    return {t:j for t, j in zip(game.topics, game.generate_rv('dirichlet',
-                                                              alpha=alpha))}
-
+    for t_r, relevance in zip(author.topic_relevances, game.generate_rv('dirichlet',
+                                                                         alpha=alpha)):
+        t_r.relevance = relevance
+    

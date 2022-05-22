@@ -1,3 +1,10 @@
+import models as m
+import simulate_static
+from tqdm import tqdm
+
+
+
+
 from tqdm import tqdm
 import random
 import numpy as np
@@ -64,19 +71,13 @@ def generate_pvs(start = 0, end = N_DAYS_PERIOD_0):
         print(np.average(pv_scores))
         print(np.std(pv_scores))
 
-#game = m.Game(name='Test Game', seed=123)
+# game = m.Game(name='Test Game', seed=123, n_days=30*2, n_days_p0=30, n_authors=50, n_users=1000)
 
 def initiate_game(game):
     TOPIC_NAMES = ['Opinion', 'Politics', 'World Events', 'Business', 'Technology', 'Arts & Culture', 'Sports', 'Health', 'Home', 'Travel', 'Fashion', 'Food']
     TOPIC_FREQS = [0.1, 0.1, 0.1, 0.1, 0.08, 0.08, 0.08, 0.08, 0.08, 0.07, 0.07, 0.06]
     
     topic_affinities = np.ones(len(TOPIC_NAMES))*0.2
-    
-    
-    #n_days = 30*2
-    #n_days_period_0 = 30
-    #n_authors = 50
-    #n_users = 1000
 
     with m.Session() as db:
         # Create the topics
@@ -92,62 +93,49 @@ def initiate_game(game):
         # ------------------
         print('Generating authors')
         
-        author_popularities = game.generate_rv('dirichlet', alpha=np.ones(game.n_authors))
-        
         for a in range(game.n_authors):
             author =  m.Author(name    = simulate_static.author_name(game),
-                                         quality = simulate_static.author_quality(game))
+                               quality = simulate_static.author_quality(game))
             game.authors.append(author)
             
             # Add author expertise for every topic
-            for t in range(game.topics):
+            for t in game.topics:
                 author.topic_expertises.append(m.AuthorTopic(topic=t))
             
-            # Generate the expertises for that author
             simulate_static.add_author_expertises(author, game)
-                                         
+                    
         # Add author productivities
         simulate_static.add_author_productivities(game)
         
         db.commit()
         
-        
-
-
-        
-            # Add topic affinities
-            for t, affinity in zip(game.topics,
-                                     game.generate_rv('dirichlet', alpha=topic_affinities)):
-                db.add(m.AuthorTopic(topic=t, author=author, affinity=affinity))
-            
-        db.commit()
-        
         # Create the events
         # -----------------
         print('Generating events')
+        
         for day in tqdm(range(game.n_days)):
-            # Generate 0, 1, 2, or 3 events for this day.
-            for _ in range(m.Event.g_events_per_day(game)):
-                # Calibrate the intensity so that the most likely density is 1.
-                # The intensity decreases all the way down to a maximum of 10,
-                # where we observe a small bump because of rounding
-                
+            n_events = simulate_static.events_per_day(game)
+            
+            for _ in range(n_events):
                 event = m.Event(start     = day,
-                                intensity = m.Event.g_event_intensity(game),
-                                game      = game)
-                db.add(event)
+                                intensity = simulate_static.event_intensity(game))
+                game.events.append(event)
                 
-                # Add topic affinities
-                for t, relevance in m.EventTopic.g_event_topic_relevance(game):
-                    db.add(m.EventTopic(topic=t, event=event, affinity=relevance))
+                # Add topic relevance for each topic
+                for t in game.topics:
+                    event.topic_relevances.append(m.EventTopic(topic=t))
                 
+                simulate_static.add_event_relevances(event, game)
+        
         db.commit()
         
-        # Create articles
-        # ---------------
+        # Create the articles
+        # -------------------
         print('Generating articles')
+        
         for day in tqdm(range(game.n_days)):
             
+        
         
         
 
