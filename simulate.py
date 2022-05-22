@@ -16,7 +16,7 @@ fake = Faker()
 
 # Static definition of topics
 
-TOPIC_ALPHAS = np.ones(len(TOPIC_NAMES))
+
 
 # 1. Topics DONE
 # 2. Authors DONE
@@ -26,20 +26,6 @@ TOPIC_ALPHAS = np.ones(len(TOPIC_NAMES))
 # 6. Pageviews
 # 7. Conversions
 
-def generate_topics():
-    # Define possible topics and baseline probabilities // right now all made up, but should be based on data eventually
-    return zip(
-        TOPIC_NAMES,
-        TOPIC_PROBS[0],
-    )
-
-# Generate fake authors and probability vectors
-def generate_authors():
-    names = [fake.name() for i in range(N_AUTHORS)]
-    quality = [uniform.rvs()*10 for i in range(N_AUTHORS)]
-    topics = np.array([dirichlet.rvs(TOPIC_ALPHAS)[0] for auth in names])
-    popularity = dirichlet.rvs(np.ones(N_AUTHORS)*10)[0]
-    return zip(names, quality, popularity, topics)
 
 # this has to have no memory so that we can use it during the simulation
 def generate_pvs(start = 0, end = N_DAYS_PERIOD_0):
@@ -78,40 +64,90 @@ def generate_pvs(start = 0, end = N_DAYS_PERIOD_0):
         print(np.average(pv_scores))
         print(np.std(pv_scores))
 
+#game = m.Game(name='Test Game', seed=123)
+
 def initiate_game(game):
     TOPIC_NAMES = ['Opinion', 'Politics', 'World Events', 'Business', 'Technology', 'Arts & Culture', 'Sports', 'Health', 'Home', 'Travel', 'Fashion', 'Food']
     TOPIC_FREQS = [0.1, 0.1, 0.1, 0.1, 0.08, 0.08, 0.08, 0.08, 0.08, 0.07, 0.07, 0.06]
+    
+    topic_affinities = np.ones(len(TOPIC_NAMES))*0.2
+    
+    
+    #n_days = 30*2
+    #n_days_period_0 = 30
+    #n_authors = 50
+    #n_users = 1000
 
-    N_DAYS = 30*2
-    N_DAYS_PERIOD_0 = 30
-    n_authors = 50
-    N_USERS = 1000
-
-    with Session() as db:
+    with m.Session() as db:
         # Create the topics
+        # -----------------
         print('Generating topics')
         
         for t_name, t_freq in zip(TOPIC_NAMES, TOPIC_FREQS):
-            db.add(m.Topic(name=t_name, freq=t_freq, game=game))
+            game.topics.append(m.Topic(name=t_name, freq=t_freq, game=game))
         
         db.commit()
         
         # Create the authors
+        # ------------------
         print('Generating authors')
         
-        for a in range(n_authors):
-            db.add(m.Author(name       = game.generate_rv('name'),
-                            quality    = game.generate_rv('uniform')*10,
-                            popularity = 
+        author_popularities = game.generate_rv('dirichlet', alpha=np.ones(game.n_authors))
+        
+        for a in range(game.n_authors):
+            author =  m.Author(name    = simulate_static.author_name(game),
+                                         quality = simulate_static.author_quality(game))
+            game.authors.append(author)
+            
+            # Add author expertise for every topic
+            for t in range(game.topics):
+                author.topic_expertises.append(m.AuthorTopic(topic=t))
+            
+            # Generate the expertises for that author
+            simulate_static.add_author_expertises(author, game)
+                                         
+        # Add author productivities
+        simulate_static.add_author_productivities(game)
+        
+        db.commit()
         
         
-        def generate_authors():
-    names = [fake.name() for i in range(N_AUTHORS)]
-    quality = [uniform.rvs()*10 for i in range(N_AUTHORS)]
-    topics = np.array([dirichlet.rvs(TOPIC_ALPHAS)[0] for auth in names])
-    popularity = dirichlet.rvs(np.ones(N_AUTHORS)*10)[0]
-    return zip(names, quality, popularity, topics)
+
+
         
+            # Add topic affinities
+            for t, affinity in zip(game.topics,
+                                     game.generate_rv('dirichlet', alpha=topic_affinities)):
+                db.add(m.AuthorTopic(topic=t, author=author, affinity=affinity))
+            
+        db.commit()
+        
+        # Create the events
+        # -----------------
+        print('Generating events')
+        for day in tqdm(range(game.n_days)):
+            # Generate 0, 1, 2, or 3 events for this day.
+            for _ in range(m.Event.g_events_per_day(game)):
+                # Calibrate the intensity so that the most likely density is 1.
+                # The intensity decreases all the way down to a maximum of 10,
+                # where we observe a small bump because of rounding
+                
+                event = m.Event(start     = day,
+                                intensity = m.Event.g_event_intensity(game),
+                                game      = game)
+                db.add(event)
+                
+                # Add topic affinities
+                for t, relevance in m.EventTopic.g_event_topic_relevance(game):
+                    db.add(m.EventTopic(topic=t, event=event, affinity=relevance))
+                
+        db.commit()
+        
+        # Create articles
+        # ---------------
+        print('Generating articles')
+        for day in tqdm(range(game.n_days)):
+            
         
         
 
@@ -131,43 +167,9 @@ def seed():
 
         
 
-        print('Generating Authors')
-        for author_name, quality, popularity, topic_probs in generate_authors():
-            a = Author(name=author_name, quality=quality, popularity=popularity, game=game)
-            for topic, prob in zip(topics, topic_probs):
-                tp = AuthorTopic(prob=prob)
-                tp.topic = topic
-                a.topics.append(tp)
-            session.add(a)
-            authors.append(a)
-        session.commit()
-
         events = []
         intensities = [] # instrumented to add articles based on intensity
 
-        print('Generating Events')
-        for day in tqdm(range(N_DAYS)):
-            # Generate new event with some probability (TBD)
-            # Always at least one event
-            for _ in range(0, max(1, int(norm.rvs(loc=3, scale=2)))):
-                event_influence = dirichlet.rvs(TOPIC_ALPHAS)[0] # Concentration parameters TBD
-                event_duration = expon.rvs(loc=0.01, scale=0.1) # some events should be long-lived
-                duration_days = np.ceil(event_duration * 30)
-                # hmm, event duration and intensity is generally correlated
-                event_intensity = expon.rvs(scale=0.1, loc=0.1)
-                evt = Event(
-                    start=day,
-                    end=day+duration_days,
-                    intensity=event_intensity,
-                    game=game,
-                )
-                for topic, prob in zip(topics, event_influence):
-                    tp = EventTopic(prob=prob)
-                    tp.topic = topic
-                    evt.topics.append(tp)
-                session.add(evt)
-                events.append(evt)
-        session.commit()
         
         print('Generating Articles')
         for day in tqdm(range(N_DAYS)):

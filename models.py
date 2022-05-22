@@ -5,12 +5,6 @@ import sqlalchemy.orm as sa_orm
 
 
 import itertools
-import random
-
-import pandas as pd
-
-#from sqlalchemy import Column, Integer, String, ForeignKey, Float, Boolean, func, select
-#from sqlalchemy.orm import relationship
 
 from metrics import log_metric
 
@@ -34,10 +28,153 @@ class BaseStrategy:
     ads = 3
     free_pvs = 12
 
-# --------------------------------
-# -  Section 1; base elements    -
-# --------------------------------
+# -----------------------------
+# -  Section 0 - terminology  -
+# -----------------------------
 
+'''
+This section summarizes terminology we need to be consistent with:
+  - Author
+      * quality      : how good the author is
+      * productivity : the likelihood an author will write an
+                       article
+  - Event
+      * intensity    : the higher the intensity, the longer the event
+                       and the stronger its impact on likely articles
+  - Topic
+      * suitability : the likelihood a specific topic will appear in our
+                      publication
+  - Author <> Topic
+      * expertise   : the likelihood an author will write on a
+                      specific topic
+  - Event<>Topic
+      * relevance   : the likelihood an event will lead to an article
+                      about a specific topic
+  - User <> Topic
+      * interest    : the likelihood a user will read an article on a
+                      specific topic
+  - User <> Author
+      * affinity    : the likelihood a user will want to read an article
+                      by a specific author
+  
+'''
+
+# ---------------------------------
+# -  Section 1; base elements     -
+# -  (Alphabetical by class name) -
+# ---------------------------------
+
+class Article(Base):
+    '''
+    A specific article, associated with a game
+      - topic_id  : the topic the article is about
+      - author_id : the author who wrote the article
+      - day       : the day on which the article was published
+      - wordcount : the number of words in the article
+      - vocab     : a score between 0 and 1 indicating the complexity
+                    of the vocabulary in this article
+    '''
+    
+    __tablename__ = 'article'
+    
+    id        = sa.Column(sa.Integer, primary_key=True)
+    game_id   = sa.Column(sa.ForeignKey('game.id'))
+    topic_id  = sa.Column(sa.ForeignKey('topic.id'))
+    author_id = sa.Column(sa.ForeignKey('author.id'))
+    
+    day       = sa.Column(sa.Integer)
+    wordcount = sa.Column(sa.Integer)
+    vocab     = sa.Column(sa.Integer)
+    
+    game      = sa_orm.relationship('Game')
+    topic     = sa_orm.relationship('Topic')
+    author    = sa_orm.relationship('Author')
+    
+class Author(Base):
+    '''
+    A specific author, associated with a game
+      - quality : the quality of the author, a number between
+                  0 and 10
+      - productivity : the productivity of the author (i.e., how
+            often they write articles). These are expressed as
+            the probability THIS author will write an article if
+            *any* author will write an article, so the productivities
+            sum to 1 over all authors
+      
+    This author will generally have more interest in some topics
+    than others. These relationships will be captured by rows in
+    author_topic
+    '''
+    
+    __tablename__ = 'author'
+    
+    id                = sa.Column(sa.Integer,  primary_key=True)
+    game_id           = sa.Column(sa.ForeignKey('game.id'))
+    name              = sa.Column(sa.String(50))
+    quality           = sa.Column(sa.Integer)
+    productivity      = sa.Column(sa.Integer)
+    
+    game              = sa_orm.relationship('Game')
+    topic_expertises  = sa_orm.relationship('AuthorTopic', back_populates='author')
+
+    def topic_by_id(self, topic_id):
+        for t in self.topics:
+            if t.topic_id == topic_id:
+                return t
+
+class Event(Base):
+    '''
+    A specific event, associated with a game. Attributes:
+      - start     : the day on which the event begins
+      - intensity : the intensity of the event; this will be a number
+                    between 1 and 10. The higher the intensity, the
+                    longer the event and the more pronounced its effect
+                    (see topic_intensities method)
+      - game_id   : the game the event belongs to
+
+    Events are likely to lead to articles on specific topics
+    with varying probabilities, captured by rows in event_topic
+    '''
+
+    __tablename__ = 'event'
+    
+    id                = sa.Column(sa.Integer, primary_key=True)
+    start             = sa.Column(sa.Integer)
+    intensity         = sa.Column(sa.Integer)
+    game_id           = sa.Column(sa.ForeignKey('game.id'))
+    
+    game              = sa_orm.relationship('Game')
+    topic_relevances  = sa_orm.relationship('EventTopic',back_populates='events')
+    
+    def topic_intensities(self, day):
+        '''
+        Given a specific day, this function will return a
+        dictionary, in which
+          - Each key is a topic_id
+          - Each value gives the impact of this event on the topic,
+            taking into account
+              (1) The intensity
+              (2) The time since the start of the event
+              
+        The higher the intensity, the longer the event has an impact,
+        and the stronger that impact.
+        '''
+        
+        if day < self.start:
+            # The event hasn't happened yet - the impact on every
+            # topic is 0
+            return {i.topic.id:0 for i in self.topic_relevances}
+        else:
+            # The higher the intensity, the longer the effect
+            time_effect = np.exp(-(day - self.start)/self.intensity)
+            
+            # If the effect is smaller than 0.05 (more than 2 days after
+            # an event of intensity 1), set it to 0
+            time_effect = 0 if time_effect <= 0.05 else time_effect
+            
+            return {i.topic.id:self.intensity*time_effect*i.relevance
+                                            for i in self.topic_relevances}
+        
 class Game(Base, rand_utils.Rand_utils_mixin):
     '''
     This class describes a specific game.
@@ -53,6 +190,12 @@ class Game(Base, rand_utils.Rand_utils_mixin):
     seed         = sa.Column(sa.Integer, nullable=False)
     name         = sa.Column(sa.String(50))
     
+    # Simulation parameters
+    n_days       = sa.Column(sa.Integer)
+    n_days_p0    = sa.Column(sa.Integer)
+    n_authors    = sa.Column(sa.Integer)
+    n_users      = sa.Column(sa.Integer)
+    
     random_state = sa.Column(sa.String(20000), default='')
     
     teams        = sa_orm.relationship('Team', back_populates='game')
@@ -66,6 +209,59 @@ class Game(Base, rand_utils.Rand_utils_mixin):
         super(Game, self).__init__(**kwargs)
         
         rand_utils.init_random_state(self)
+
+class Pageview(Base):
+    '''
+    This class represents a pageview in the came, associated with a
+    specific user, article, and team (different teams might experience
+    different views for the same article)
+    '''
+    
+    __tablename__ = 'pageview'
+    
+    id          = sa.Column(sa.Integer, primary_key=True)
+    user_id     = sa.Column(sa.Integer, sa.ForeignKey('user.id'))
+    article_id  = sa.Column(sa.Integer, sa.ForeignKey('article.id'))
+    team_id     = sa.Column(sa.Integer, sa.ForeignKey('team.id'))
+    day         = sa.Column(sa.Integer)
+    duration    = sa.Column(sa.Integer)
+    ads_seen    = sa.Column(sa.Integer)
+    saw_paywall = sa.Column(sa.Boolean)
+    converted   = sa.Column(sa.Boolean)
+    
+    user        = sa_orm.relationship('User', back_populates='pageviews')
+    article     = sa_orm.relationship('Article')
+    team        = sa_orm.relationship('Team')
+
+class Player(Base):
+    '''
+    Player email, hashed password, etc...
+    '''
+    
+    __tablename__ = 'player'
+    
+    id              = sa.Column(sa.Integer, primary_key=True)
+    email           = sa.Column(sa.String(50), nullable=False)
+    hashed_password = sa.Column(sa.String(50), nullable=False)
+    
+    teams = sa_orm.relationship('Team', secondary='player_team', back_populates='players')
+
+class Strategy(Base):
+    '''
+    This class describes a strategy. Each strategy belongs to a
+    team, and can be applied to a number of users
+    '''
+
+    __tablename__ = 'strategy'
+    
+    id             = sa.Column(sa.Integer, primary_key=True)
+    team_id        = sa.Column(sa.Integer, sa.ForeignKey('team.id'))
+    cost           = sa.Column(sa.Float)
+    ads            = sa.Column(sa.Integer)
+    free_pvs       = sa.Column(sa.Integer)
+    
+    team           = sa_orm.relationship('Team')
+    users_assigned = sa_orm.relationship('UserStrategy', back_populates='strategy')
 
 class Team(Base, rand_utils.Rand_utils_mixin):
     '''
@@ -102,18 +298,21 @@ class Team(Base, rand_utils.Rand_utils_mixin):
         self.seed = self.game.seed
         rand_utils.init_random_state(self) 
 
-class Player(Base):
+class Topic(Base):
     '''
-    Player email, hashed password, etc...
+    A specific topic, associated with a game
+       - name : the name of the topic
+       - freq : 
     '''
     
-    __tablename__ = 'player'
+    __tablename__ = 'topic'
     
-    id              = sa.Column(sa.Integer, primary_key=True)
-    email           = sa.Column(sa.String(50), nullable=False)
-    hashed_password = sa.Column(sa.String(50), nullable=False)
+    id                = sa.Column(sa.Integer, primary_key=True)
+    game_id           = sa.Column(sa.ForeignKey('game.id'))
+    name              = sa.Column(sa.String(50))
+    freq              = sa.Column(sa.Float)
     
-    teams = sa_orm.relationship('Team', secondary='player_team', back_populates='players')
+    game              = sa_orm.relationship('Game', back_populates='topics')
 
 class User(Base):
     '''
@@ -142,11 +341,11 @@ class User(Base):
     media_consumption    = sa.Column(sa.Integer)
     internet_usage_index = sa.Column(sa.Integer)
 
-    game       = sa_orm.relationship('Game')
-    topics     = sa_orm.relationship('Topic', secondary='user_topic')
-    authors    = sa_orm.relationship('Author', secondary='user_author')
-    pageviews  = sa_orm.relationship('Pageview', back_populates='user', lazy='dynamic')
-    strategies = sa_orm.relationship('Strategy', secondary='user_strategy', back_populates='users', lazy='dynamic')
+    game              = sa_orm.relationship('Game')
+    topic_interests   = sa_orm.relationship('UserTopic', back_populates='user')
+    author_affinities = sa_orm.relationship('Author', secondary='user_author')
+    pageviews         = sa_orm.relationship('Pageview', back_populates='user', lazy='dynamic')
+    strategies        = sa_orm.relationship('UserStrategy', back_populates='user')
 
     def topics_dict(self):
         td = {}
@@ -219,167 +418,56 @@ class User(Base):
                     score_cutoff += score_stddev * 0.5
             pv_cache.append(team, self, articles_clicked)
 
-class Pageview(Base):
-    '''
-    This class represents a pageview in the came, associated with a
-    specific user, article, and team (different teams might experience
-    different views for the same article)
-    '''
-    
-    __tablename__ = 'pageview'
-    
-    id          = sa.Column(sa.Integer, primary_key=True)
-    user_id     = sa.Column(sa.Integer, sa.ForeignKey('user.id'))
-    article_id  = sa.Column(sa.Integer, sa.ForeignKey('article.id'))
-    team_id     = sa.Column(sa.Integer, sa.ForeignKey('team.id'))
-    day         = sa.Column(sa.Integer)
-    duration    = sa.Column(sa.Integer)
-    ads_seen    = sa.Column(sa.Integer)
-    saw_paywall = sa.Column(sa.Boolean)
-    converted   = sa.Column(sa.Boolean)
-    
-    user        = sa_orm.relationship('User', back_populates='pageviews')
-    article     = sa_orm.relationship('Article')
-    team        = sa_orm.relationship('Team')
-
-class Strategy(Base):
-    '''
-    This class describes a strategy. Each strategy belongs to a
-    team, and can be applied to a number of users
-    '''
-
-    __tablename__ = 'strategy'
-    
-    id       = sa.Column(sa.Integer, primary_key=True)
-    team_id  = sa.Column(sa.Integer, sa.ForeignKey('team.id'))
-    cost     = sa.Column(sa.Float)
-    ads      = sa.Column(sa.Integer)
-    free_pvs = sa.Column(sa.Integer)
-    
-    team     = sa_orm.relationship('Team')
-    users    = sa_orm.relationship('User', secondary='user_strategy', back_populates='strategies')
-
-class Topic(Base):
-    '''
-    A specific topic, associated with a game, including the
-    frequency of the topic in that game
-    '''
-    
-    __tablename__ = 'topic'
-    
-    id      = sa.Column(sa.Integer, primary_key=True)
-    name    = sa.Column(sa.String(50))
-    freq    = sa.Column(sa.Float)
-    game_id = sa.Column(sa.ForeignKey('game.id'))
-    
-    game    = sa_orm.relationship('Game', back_populates='topics')
-    authors = sa_orm.relationship('Author', secondary='author_topic', back_populates='topics')
-    events  = sa_orm.relationship('Event', secondary='event_topic', back_populates='topics')
-    users   = sa_orm.relationship('User', secondary='user_topic', back_populates='topics')
-
-class Event(Base):
-    '''
-    A specific event, associated with a game, including the
-    intensity of the event in re: its effect on articles
-    '''
-
-    __tablename__ = 'event'
-    
-    id        = sa.Column(sa.Integer, primary_key=True)
-    start     = sa.Column(sa.Integer)
-    end       = sa.Column(sa.Integer)
-    intensity = sa.Column(sa.Integer)
-    game_id   = sa.Column(sa.ForeignKey('game.id'))
-    
-    game      = sa_orm.relationship('Game')
-    topics    = sa_orm.relationship('Topic', secondary='event_topic', back_populates='events')
-
-class Author(Base):
-    '''
-    A specific author, associated with a game, including
-    the author's intrinsic popularity and quality
-    '''
-    
-    __tablename__ = 'author'
-    
-    id         = sa.Column(sa.Integer,  primary_key=True)
-    name       = sa.Column(sa.String(50))
-    quality    = sa.Column(sa.Integer)
-    popularity = sa.Column(sa.Integer)
-    game_id    = sa.Column(sa.ForeignKey('game.id'))
-    
-    game       = sa_orm.relationship('Game')
-    topics     = sa_orm.relationship('Topic', secondary='author_topic', back_populates='authors')
-    users      = sa_orm.relationship('User', secondary='user_author', back_populates='authors')
-
-    def topic_by_id(self, topic_id):
-        for t in self.topics:
-            if t.topic_id == topic_id:
-                return t
-
-class Article(Base):
-    '''
-    Article
-    '''
-    
-    __tablename__ = 'article'
-    
-    id        = sa.Column(sa.Integer, primary_key=True)
-    topic_id  = sa.Column(sa.ForeignKey('topic.id'))
-    author_id = sa.Column(sa.ForeignKey('author.id'))
-    day       = sa.Column(sa.Integer)
-    wordcount = sa.Column(sa.Integer)
-    game_id   = sa.Column(sa.ForeignKey('game.id'))
-    
-    game      = sa_orm.relationship('Game')
-    topic     = sa_orm.relationship('Topic')
-    author    = sa_orm.relationship('Author')
-
-
 # --------------------------------------
 # -  Section 2; many-to-many tables    -
+# -  (Alphabetical by class name)      -
 # --------------------------------------
 
 class AuthorTopic(Base):
     '''
-    Many-to-many connection between author and topic, including
-    the author's affinity for that topic
+    Many-to-many connection between author and topic
+      - expertise : the author's expertise for that topic
     '''
     
     __tablename__ = 'author_topic'
     
     author_id = sa.Column(sa.ForeignKey('author.id'), primary_key=True)
-    topic_id = sa.Column(sa.ForeignKey('topic.id'), primary_key=True)
-    affinity = sa.Column(sa.Float)
-
+    topic_id  = sa.Column(sa.ForeignKey('topic.id'), primary_key=True)
+    
+    expertise = sa.Column(sa.Float)
+    
+    author    = sa_orm.relationship('Author', back_populates='topic_expertises')
+    topic     = sa_orm.relationship('Topic')
+    
 class EventTopic(Base):
     '''
-    Many-to-many connection between event and topic, including
-    the event's relevance to that topic
+    Many-to-many connection between event and topic
+      - relevance : how relevant this topic is to that event.
+                    For each event, relevances sum to 1 for all
+                    topics
     '''
-
+    
     __tablename__ = 'event_topic'
     
     event_id  = sa.Column(sa.ForeignKey('event.id'), primary_key=True)
     topic_id  = sa.Column(sa.ForeignKey('topic.id'), primary_key=True)
     
     relevance = sa.Column(sa.Float)
+    
+    event     = sa_orm.relationship('Event', back_populates='topic_relevances')
+    topic     = sa_orm.relationship('Topic')
 
-class UserTopic(Base):
+class PlayerTeam(Base):
     '''
-    Many-to-many connection table between user and topic, including
-    the user's affinity for this topic
+    This class denotes the fact a player should have access to
+    a specific team. It is a many-to-many association table
     '''
     
-    __tablename__ = 'user_topic'
+    __tablename__ = 'player_team'
     
-    user_id  = sa.Column(sa.ForeignKey('user.id'), primary_key=True)
-    topic_id = sa.Column(sa.ForeignKey('topic.id'), primary_key=True)
-    
-    affinity = sa.Column(sa.Float)
+    player_id = sa.Column(sa.ForeignKey('player.id'), primary_key=True)
+    team_id   = sa.Column(sa.ForeignKey('team.id'), primary_key=True)
 
-# Doesn't strictly need to be defined as a model but it will be
-# easier to add more signals on this relationship later if it is.
 class UserAuthor(Base):
     '''
     Many-to-many connection table between user and author
@@ -406,17 +494,25 @@ class UserStrategy(Base):
     strategy_id = sa.Column(sa.ForeignKey('strategy.id'))
     start_day   = sa.Column(sa.Integer)
     end_day     = sa.Column(sa.Integer)
+    
+    strategy    = sa_orm.relationship('Strategy', back_populates='users_assigned')
+    user        = sa_orm.relationship('User', back_populates='strategies')
 
-class PlayerTeam(Base):
+class UserTopic(Base):
     '''
-    This class denotes the fact a player should have access to
-    a specific team. It is a many-to-many association table
+    Many-to-many connection table between user and topic, including
+    the user's interest for this topic
     '''
     
-    __tablename__ = 'player_team'
+    __tablename__ = 'user_topic'
     
-    player_id = sa.Column(sa.ForeignKey('player.id'), primary_key=True)
-    team_id   = sa.Column(sa.ForeignKey('team.id'), primary_key=True)
+    user_id  = sa.Column(sa.ForeignKey('user.id'), primary_key=True)
+    topic_id = sa.Column(sa.ForeignKey('topic.id'), primary_key=True)
+    
+    interest = sa.Column(sa.Float)
+    
+    user     = sa_orm.relationship('User', back_populates='topic_interests')
+    topic    = sa_orm.relationship('Topic')
 
 # ---------------------------
 # -  Section 3; PV cache    -

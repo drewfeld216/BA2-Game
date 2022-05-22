@@ -105,10 +105,11 @@ def generate_rv(obj, kind, n=1, **kwargs):
     
     # Dictionary mapping each variable type to a function
     # which generates that RV
-    rv_kinds = {'uniform'     : lambda                : np.random.uniform(size=n),
+    rv_kinds = {'uniform'     : lambda low=0, high=1  : np.random.uniform(size=n, low=low, high=high),
                 'exponential' : lambda loc=0, scale=1 : np.random.exponential(size=n)*scale + loc,
                 'normal'      : lambda loc=0, scale=1 : np.random.normal(loc=loc, scale=scale, size=n),
                 'dirichlet'   : lambda alpha          : np.random.dirichlet(alpha=alpha, size=n),
+                'choice'      : lambda l, p=None      : np.random.choice(l, size=n, p=p),
                 'name'        : lambda                : [fake.name() for i in range(n)],
                 'ipv4'        : lambda                : [fake.ipv4() for i in range(n)],
                 'user_agent'  : lambda                : [fake.user_agent() for i in range(n)]}
