@@ -8,19 +8,25 @@ Note that there are two randomization engines - one used by numpy and
 scipy, and one used by faker. This module deals with both at once and
 abstracts this complexity.
 
-It's meant to be used as follows:
-  - First, run init_random_state with a seed. This wil initialize the
-    random states, and returned a serialized version of the reuslting
-    random state
-  - Next, use generate_rv to generate random variables of al kinds (all
-    details are abstracted). This function will accept a serialized
-    random state, and generate random variables by "picking up" from that
-    place in the random sequence. It will then return the random state
-    *after* generating those variables. This can be saved and used in
-    the future to "pick up" from that same place
-This allows us to maintain multiple parallel random paths - as long as
-we save the serialized random states, we can always pick up from any given
-path
+The "workhorse function" of this module is generate_rv - it accepts
+an object, and details of what kind of random number should be generated.
+It then does the following
+  - Sets the state of the random number generates to obj.random_state. This
+    allows us to "pick up" from the last time a random number was generated
+  - Generates whatever RV we need
+  - Saves the state of the generators to obj.random_state, so we can pick up
+    in the future
+
+If the object has no random_state attribute, or if it is none, or if it is
+an empty string, generate_rv will look for a seed attribute, initialize 
+the numpy/faker engines using that seed, and save the state of the engine
+to random_state before starting.
+
+In practice, obj can inherit from Rand_utils_mixin to be endowed with a
+generate_rv function which seamlessly handles the update of random_state.
+
+Multiple objects can each have a random_state, and each can operate in
+parallel without upsetting each other 
 '''
 
 import numpy as np
@@ -103,13 +109,29 @@ def generate_rv(obj, kind, n=1, **kwargs):
         and if n>1, this will be a list/array
     '''
     
+    # Check whether the random_state has been saved
+    if ( (not hasattr(obj, 'random_state'))
+                or (obj.random_state is None)
+                    or (obj.random_state == '')
+                        or (not (type(obj.random_state) is str)) ):
+        init_random_state(obj)
+    
+    def stand(x):
+        sum_x = sum(x)
+        
+        if sum_x == 1:
+            return x
+        else:
+            return [i/sum_x for i in x]
+    
     # Dictionary mapping each variable type to a function
     # which generates that RV
     rv_kinds = {'uniform'     : lambda low=0, high=1  : np.random.uniform(size=n, low=low, high=high),
                 'exponential' : lambda loc=0, scale=1 : np.random.exponential(size=n)*scale + loc,
                 'normal'      : lambda loc=0, scale=1 : np.random.normal(loc=loc, scale=scale, size=n),
+                'poisson'     : lambda lam            : np.random.poisson(lam=lam, size=n),
                 'dirichlet'   : lambda alpha          : np.random.dirichlet(alpha=alpha, size=n),
-                'choice'      : lambda l, p=None      : np.random.choice(l, size=n, p=p),
+                'choice'      : lambda l, p=None      : np.random.choice(l, size=n, p=stand(p)),
                 'name'        : lambda                : [fake.name() for i in range(n)],
                 'ipv4'        : lambda                : [fake.ipv4() for i in range(n)],
                 'user_agent'  : lambda                : [fake.user_agent() for i in range(n)]}
