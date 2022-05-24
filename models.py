@@ -99,12 +99,25 @@ class Author(Base):
     
     game              = sa_orm.relationship('Game', back_populates='authors')
     topic_expertises  = sa_orm.relationship('AuthorTopic', back_populates='author')
+    
+    def topic_expertise(self, topic):
+        '''
+        Returns the topic_expertise object for a specific topic
+        object
+        '''
+        
+        out = [t_e for t_e in self.topic_expertises if t_e.topic == topic]
+        
+        assert len(out) == 1
+        
+        return out[0]
+        
 
 class Event(Base):
     '''
     A specific event, associated with a game
       - start            : the day on which the event begins
-                                --> Generated in simulate_static.game
+                                --> Generated in simulate_static.game_static
       - intensity        : the intensity of the event, a number between 0.1 and 1
                            that indicates the probability the event will lead to an
                            article on the day the event happens. The event then continues
@@ -161,6 +174,7 @@ class Game(Base, rand_utils.Rand_utils_mixin):
     authors      = sa_orm.relationship('Author', back_populates='game')
     events       = sa_orm.relationship('Event', back_populates='game')
     articles     = sa_orm.relationship('Article', back_populates='game')
+    users        = sa_orm.relationship('User', back_populates='game')
 
 class Pageview(Base):
     '''
@@ -261,8 +275,7 @@ class Topic(Base):
 class User(Base):
     '''
     This class represents a single user, associated with one specific
-    game
-      - Most data generated in simulate_static
+    game. Most data generated in simulate_static
     '''
     
     __tablename__  = 'user'
@@ -279,14 +292,14 @@ class User(Base):
     ad_blocked     = sa.Column(sa.Boolean)
 
     # Attributes that need to be purhcased
-    age                  = sa.Column(sa.Integer)
-    household_income     = sa.Column(sa.Integer)
+    age                  = sa.Column(sa.String(10))
+    household_income     = sa.Column(sa.String(10))
     media_consumption    = sa.Column(sa.Integer)
     internet_usage_index = sa.Column(sa.Integer)
 
-    game              = sa_orm.relationship('Game')
+    game              = sa_orm.relationship('Game', back_populates='users')
     topic_interests   = sa_orm.relationship('UserTopic', back_populates='user')
-    author_affinities = sa_orm.relationship('Author', secondary='user_author')
+    author_affinities = sa_orm.relationship('UserAuthor', back_populates='user')
     pageviews         = sa_orm.relationship('Pageview', back_populates='user', lazy='dynamic')
     strategies        = sa_orm.relationship('UserStrategy', back_populates='user')
 
@@ -343,14 +356,17 @@ class PlayerTeam(Base):
 class UserAuthor(Base):
     '''
     Many-to-many connection table between user and author
-    
-    Might later include user-author affinities
     '''
     
     __tablename__ = 'user_author'
     
     user_id   = sa.Column(sa.ForeignKey('user.id'), primary_key=True)
     author_id = sa.Column(sa.ForeignKey('author.id'), primary_key=True)
+    
+    affinity  = sa.Column(sa.Float)
+    
+    user      = sa_orm.relationship('User', back_populates='author_affinities')
+    author    = sa_orm.relationship('Author')    
 
 class UserStrategy(Base):
     '''
