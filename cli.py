@@ -6,7 +6,7 @@ from simulate import seed, generate_pvs
 
 commands = {
     'create_db': lambda args: create_db(),
-    'seed_db': lambda args: seed(),
+    'create_game': lambda args: game_static(args),
     'seed_pvs': lambda args: generate_pvs(),
     'draw_db': lambda args: draw_db()
 }
