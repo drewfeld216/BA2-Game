@@ -33,6 +33,9 @@ from models import UserStrategy, Pageview
 # at websites that they would never pay money for. But when a user visits our site directly, the
 # primary activity is engaging with the news and they are primed to pay.
 #
+# DF: This is obviously a lot to simulate -- seems to me that we could just randomly determine 
+# the referral source using some simple probabilities (that may change over time)
+#
 # How many articles will they read?
 # 
 # The number of articles is driven almost entirely by interest in a particular topic, affinity for
@@ -41,6 +44,9 @@ from models import UserStrategy, Pageview
 # part in determining how many articles they'll read. If they're looking to get a sense of the day's
 # news, pages per session will be much higher than if they're following a link from a friend's
 # Facebook account.
+#
+# DF: So we create a formula for page views as a function of referral source and the user's 
+# affinities and interests?
 #
 # Will a user hit the paywall?
 #
@@ -54,6 +60,7 @@ from models import UserStrategy, Pageview
 # This is driven by income, media consumption proclivities, and affinity for the publication. In
 # the real world, the strongest available predictor is the number of sessions over a period of time.
 # Buying additional data around income and media proclivities adds considerable signal.
+
 class SessionSimulator:
     def __init__(self, user, game):
         self.user = user
